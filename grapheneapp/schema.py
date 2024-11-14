@@ -10,11 +10,11 @@ class BookType(DjangoObjectType):
 
 
 class Query(graphene.ObjectType):
-    all_books = graphene.List(BookType)
-    book = graphene.Field(BookType, id=graphene.Int())
+    all_books = graphene.List(BookType, page=graphene.Int(default_value=1), per_page=graphene.Int(default_value=10))
+    book = graphene.Field(BookType, id=graphene.Int(required=True))
 
-    def resolve_all_books(root, info):
-        return Book.objects.all()
+    def resolve_all_books(root, info, page, per_page):
+        return Book.objects.all()[(page - 1) * per_page: page * per_page]
 
     def resolve_book(root, info, id):
         try:
