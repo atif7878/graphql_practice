@@ -1,50 +1,78 @@
 import graphene
-from django.core.exceptions import ValidationError
 from graphene_django.types import DjangoObjectType
-from .models import Book
+from .models import Book, Author
 import graphql_jwt
 
-from .serializers import BookSerializer
-
+# Define the Author and Book types
+class AuthorType(DjangoObjectType):
+    class Meta:
+        model = Author
 
 class BookType(DjangoObjectType):
     class Meta:
         model = Book
 
 
+# Query class to fetch all authors and books
 class Query(graphene.ObjectType):
     all_books = graphene.List(BookType, page=graphene.Int(default_value=1), per_page=graphene.Int(default_value=10))
+    all_authors = graphene.List(AuthorType)
+    author = graphene.Field(AuthorType, id=graphene.Int(required=True))
     book = graphene.Field(BookType, id=graphene.Int(required=True))
 
     def resolve_all_books(root, info, page, per_page):
         return Book.objects.all()[(page - 1) * per_page: page * per_page]
 
-    def resolve_book(root, info, id):
+    def resolve_all_authors(self, info):
+        return Author.objects.all()
+
+    def resolve_author(self, info, id):
+        try:
+            return Author.objects.get(pk=id)
+        except Author.DoesNotExist:
+            return None
+
+    def resolve_book(self, info, id):
         try:
             return Book.objects.get(pk=id)
         except Book.DoesNotExist:
             return None
 
 
+# Mutation class to handle create, update, and delete operations for Book and Author
+class CreateAuthor(graphene.Mutation):
+    class Arguments:
+        name = graphene.String(required=True)
+        birth_date = graphene.types.datetime.Date(required=True)
+
+    author = graphene.Field(AuthorType)
+
+    def mutate(self, info, name, birth_date):
+        author = Author(name=name, birth_date=birth_date)
+        author.save()
+        return CreateAuthor(author=author)
+
+
 class CreateBook(graphene.Mutation):
     class Arguments:
         title = graphene.String(required=True)
-        author = graphene.String(required=True)
+        author_id = graphene.Int(required=True)
         published_date = graphene.types.datetime.Date(required=True)
 
     book = graphene.Field(BookType)
     success = graphene.Boolean()
     errors = graphene.List(graphene.String)
 
-    def mutate(self, info, title, author, published_date):
-        data = {'title': title, 'author': author, 'published_date': published_date}
-        serializer = BookSerializer(data=data)
+    def mutate(self, info, title, author_id, published_date):
+        try:
+            author = Author.objects.get(pk=author_id)
+        except Author.DoesNotExist:
+            raise Exception('Author not found')
 
-        if serializer.is_valid():
-            book = serializer.save()
-            return CreateBook(book=book, success=True, errors=[])
-        else:
-            return CreateBook(book=None, success=False, errors=serializer.errors)
+        # Book creation
+        book = Book(title=title, author=author, published_date=published_date)
+        book.save()
+        return CreateBook(book=book, success=True, errors=[])
 
 
 class UpdateBook(graphene.Mutation):
@@ -88,8 +116,10 @@ class DeleteBook(graphene.Mutation):
             return DeleteBook(success=False)
 
 
+# Mutation class to handle JWT authentication
 class Mutation(graphene.ObjectType):
     create_book = CreateBook.Field()
+    create_author = CreateAuthor.Field()
     update_book = UpdateBook.Field()
     delete_book = DeleteBook.Field()
     token_auth = graphql_jwt.ObtainJSONWebToken.Field()
@@ -97,4 +127,5 @@ class Mutation(graphene.ObjectType):
     refresh_token = graphql_jwt.Refresh.Field()
 
 
+# Schema definition
 schema = graphene.Schema(query=Query, mutation=Mutation)
