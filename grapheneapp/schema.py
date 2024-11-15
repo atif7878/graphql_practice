@@ -1,7 +1,10 @@
 import graphene
+from django.core.exceptions import ValidationError
 from graphene_django.types import DjangoObjectType
 from .models import Book
 import graphql_jwt
+
+from .serializers import BookSerializer
 
 
 class BookType(DjangoObjectType):
@@ -30,11 +33,18 @@ class CreateBook(graphene.Mutation):
         published_date = graphene.types.datetime.Date(required=True)
 
     book = graphene.Field(BookType)
+    success = graphene.Boolean()
+    errors = graphene.List(graphene.String)
 
     def mutate(self, info, title, author, published_date):
-        book = Book(title=title, author=author, published_date=published_date)
-        book.save()
-        return CreateBook(book=book)
+        data = {'title': title, 'author': author, 'published_date': published_date}
+        serializer = BookSerializer(data=data)
+
+        if serializer.is_valid():
+            book = serializer.save()
+            return CreateBook(book=book, success=True, errors=[])
+        else:
+            return CreateBook(book=None, success=False, errors=serializer.errors)
 
 
 class UpdateBook(graphene.Mutation):
