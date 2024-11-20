@@ -26,3 +26,4 @@ class BookSerializer(serializers.ModelSerializer):
         instance.published_date = validated_data.get('published_date', instance.published_date)
         instance.save()
         return instance
+
