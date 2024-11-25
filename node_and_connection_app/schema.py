@@ -1,31 +1,32 @@
 import graphene
 from graphene_django.types import DjangoObjectType
+from graphene import relay
+from graphene_django.filter import DjangoFilterConnectionField
+from .models import Book, Author
 import graphql_jwt
-
-from node_and_connection_app.models import Author, Book
-
 
 # Define the Author and Book types
 class AuthorType(DjangoObjectType):
     class Meta:
         model = Author
+        interfaces = (relay.Node,)
 
 class BookType(DjangoObjectType):
     class Meta:
         model = Book
+        interfaces = (relay.Node,)
 
-
-# Query class to fetch all authors and books
+# Define the filter and connection fields
 class Query(graphene.ObjectType):
-    all_books = graphene.List(BookType, page=graphene.Int(default_value=1), per_page=graphene.Int(default_value=10))
-    all_authors = graphene.List(AuthorType)
-    author = graphene.Field(AuthorType, id=graphene.Int(required=True))
-    book = graphene.Field(BookType, id=graphene.Int(required=True))
+    all_books = DjangoFilterConnectionField(BookType)
+    all_authors = DjangoFilterConnectionField(AuthorType)
+    author = relay.Node.Field(AuthorType)
+    book = relay.Node.Field(BookType)
 
-    def resolve_all_books(root, info, page, per_page):
-        return Book.objects.all()[(page - 1) * per_page: page * per_page]
+    def resolve_all_books(self, info, **kwargs):
+        return Book.objects.all()
 
-    def resolve_all_authors(self, info):
+    def resolve_all_authors(self, info, **kwargs):
         return Author.objects.all()
 
     def resolve_author(self, info, id):
@@ -39,7 +40,6 @@ class Query(graphene.ObjectType):
             return Book.objects.get(pk=id)
         except Book.DoesNotExist:
             return None
-
 
 # Mutation class to handle create, update, and delete operations for Book and Author
 class CreateAuthor(graphene.Mutation):
@@ -81,7 +81,7 @@ class UpdateBook(graphene.Mutation):
     class Arguments:
         id = graphene.Int(required=True)
         title = graphene.String()
-        author = graphene.String()
+        author = graphene.Int()
         published_date = graphene.types.datetime.Date()
 
     book = graphene.Field(BookType)
@@ -95,7 +95,7 @@ class UpdateBook(graphene.Mutation):
         if title is not None:
             book.title = title
         if author is not None:
-            book.author = author
+            book.author_id = author
         if published_date is not None:
             book.published_date = published_date
 
